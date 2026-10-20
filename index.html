@@ -1762,7 +1762,7 @@ function loft(z0, z1, nz, a0, a1, na, fn, { closed = false, scale = 1, centre = 
 const CAR = (() => {
   const BW = keyf([[-2.66, 0.12], [-2.6, 0.62], [-2.4, 0.8], [-2.0, 0.86], [0.75, 0.86], [1.0, 0.66], [2.2, 0.58], [2.5, 0.44], [2.66, 0.12]]);
   const BT = keyf([[-2.66, 0.62], [-2.58, 0.84], [-2.25, 0.97], [-1.8, 1.02], [0.8, 1.02], [1.3, 1.05], [2.2, 0.99], [2.52, 0.86], [2.66, 0.62]]);
-  const BB = keyf([[-2.66, 0.55], [-2.55, 0.42], [-2.1, 0.36], [2.1, 0.36], [2.55, 0.42], [2.66, 0.55]]);
+  const BB = keyf([[-2.66, 0.5], [-2.55, 0.38], [-2.2, 0.3], [2.2, 0.3], [2.55, 0.36], [2.66, 0.48]]);
   const CT = keyf([[-2.15, 1.0], [-1.85, 1.17], [-1.45, 1.42], [-1.0, 1.61], [-0.55, 1.67], [0.22, 1.67], [0.36, 1.63], [0.74, 1.08], [0.78, 1.0]]);
   const CW = keyf([[-2.15, 0.62], [-1.7, 0.79], [-1.0, 0.81], [0.45, 0.81], [0.78, 0.74]]);
   const BELT = 1.0;
@@ -1773,10 +1773,12 @@ const CAR = (() => {
   const fender = (cx, Wk, Tk, Bk) => (z, a) => { const [ex, ey] = sEll(a, 2.5); const T = Tk(z), B = Bk(z); return [cx + ex * Wk(z), (T + B) / 2 + ey * (T - B) / 2]; };
   const FW = keyf([[0.62, 0.02], [0.95, 0.15], [1.35, 0.215], [2.2, 0.205], [2.5, 0.16], [2.66, 0.04]]);
   const FT = keyf([[0.62, 0.48], [0.95, 0.84], [1.45, 1.03], [1.95, 1.05], [2.32, 0.99], [2.56, 0.8], [2.66, 0.58]]);
-  const FB = keyf([[0.62, 0.42], [1.0, 0.5], [2.4, 0.5], [2.66, 0.56]]);
+  // fender skirts come down low, with a round wheel arch cut around each tyre
+  const arch = (zc, ra, base) => z => { const d = Math.abs(z - zc); const b = base(z); if (d < ra) return Math.max(b, 0.426 + Math.sqrt(ra * ra - d * d)); return lerp(0.426, b, sat((d - ra) / 0.07)); };
+  const FB = arch(1.62, 0.5, keyf([[0.62, 0.36], [1.0, 0.3], [2.4, 0.31], [2.66, 0.42]]));
   const RW = keyf([[-2.55, 0.03], [-2.25, 0.16], [-1.5, 0.185], [-1.05, 0.12], [-0.9, 0.02]]);
   const RT = keyf([[-2.55, 0.58], [-2.32, 0.9], [-1.9, 1.0], [-1.4, 0.98], [-1.06, 0.78], [-0.9, 0.44]]);
-  const RB = keyf([[-2.55, 0.5], [-2.3, 0.42], [-1.0, 0.42], [-0.9, 0.44]]);
+  const RB = arch(-1.62, 0.48, keyf([[-2.55, 0.44], [-2.3, 0.32], [-1.0, 0.3], [-0.9, 0.36]]));
   const G = {};
   G.body = loft(-2.66, 2.66, 80, 0, TAU, 48, body, { closed: true });
   // cabin pieces: roof, fastback, pillars; windows are separate glass
@@ -1793,8 +1795,8 @@ const CAR = (() => {
   G.rearGlass = loft(-1.5, -1.05, 8, 1.05, Math.PI - 1.05, 12, cab, { scale: 1.003, centre: cabC });
   G.fenders = [];
   for (const s of [-1, 1]) {
-    G.fenders.push(loft(0.62, 2.66, 40, 0, TAU, 28, fender(s * 0.8, FW, FT, FB), { closed: true }));
-    G.fenders.push(loft(-2.55, -0.9, 30, 0, TAU, 28, fender(s * 0.82, RW, RT, RB), { closed: true }));
+    G.fenders.push(loft(0.62, 2.66, 72, 0, TAU, 28, fender(s * 0.8, FW, FT, FB), { closed: true }));
+    G.fenders.push(loft(-2.55, -0.9, 60, 0, TAU, 28, fender(s * 0.82, RW, RT, RB), { closed: true }));
   }
   // doors: [z0, z1, hinge z, front?]; geometry per side
   G.doors = [];
@@ -1845,8 +1847,8 @@ function makeSedan() {
   add(new THREE.TorusGeometry(0.17, 0.014, 6, 24), MAT.gunDark, car.body, 0.4, 1.28, 0.38, -1.1, 0, 0, false);
   for (const s of [-1, 1]) {
     // running boards
-    add(BX(0.18, 0.035, 1.6), MAT.rubber || MAT.gunDark, car.body, s * 0.93, 0.39, -0.14);
-    add(BX(0.012, 0.02, 1.6), MAT.chrome, car.body, s * 1.02, 0.39, -0.14, 0, 0, 0, false);
+    add(BX(0.16, 0.035, 1.5), MAT.rubber || MAT.gunDark, car.body, s * 0.92, 0.31, -0.14);
+    add(BX(0.012, 0.02, 1.5), MAT.chrome, car.body, s * 1.0, 0.31, -0.14, 0, 0, 0, false);
     // headlights in the fenders: chrome bezel, glowing lens
     add(new THREE.TorusGeometry(0.115, 0.022, 8, 24), MAT.chrome, car.body, s * 0.8, 0.88, 2.47, 0, 0, 0, false);
     const lens = add(new THREE.CircleGeometry(0.11, 24), glowMat(0xfff0d0, 3), car.body, s * 0.8, 0.88, 2.485, 0, 0, 0, false);
