@@ -1587,7 +1587,11 @@ class Pelican {
     };
     // the hat goes flying
     this.hat.updateMatrixWorld(true); dyn.attach(this.hat);
-    this.hatVel = d.clone().multiplyScalar(1.5 + power * 2).setY(2.5 + power); this.hatSpin = v3(RR(-8, 8), RR(-8, 8), RR(-8, 8));
+    // knocked back off the head and tumbling end over end, with only a small lift (it used to rocket straight up and hover in slow motion)
+    this.hatVel = d.clone().setY(0).normalize().multiplyScalar(1.1 + power * 0.9).setY(0.9 + power * 0.35);
+    const tumble = v3().crossVectors(UPV, d).normalize();
+    this.hat.rotateOnWorldAxis(tumble, 0.45);
+    this.hatSpin = tumble.multiplyScalar(RR(9, 14)).add(v3(RR(-2, 2), RR(-3, 3), RR(-2, 2)));
     for (const w of this.weapons) { w.updateMatrixWorld(true); dyn.attach(w); w.userData.vel = v3(RR(-1, 1), 2.2, RR(-1, 1)).addScaledVector(d, 1.5); w.userData.spin = RR(-10, 10); }
   }
   ragdoll(dS) {
@@ -1644,7 +1648,7 @@ class Pelican {
       h.position.addScaledVector(this.hatVel, dS); this.hatVel.y -= 9.8 * dS;
       const g = groundAt(h.position.x, h.position.z) + 0.05;
       if (h.position.y < g) { h.position.y = g; this.hatVel.multiplyScalar(0.3); this.hatVel.y = Math.abs(this.hatVel.y) * 0.2; this.hatSpin.multiplyScalar(0.4); }
-      h.rotation.x += this.hatSpin.x * dS; h.rotation.y += this.hatSpin.y * dS; h.rotation.z += this.hatSpin.z * dS;
+      const w = this.hatSpin.length(); if (w > 1e-3) h.rotateOnWorldAxis(_v3.copy(this.hatSpin).divideScalar(w), w * dS);
     }
     for (const w of this.weapons) {
       if (w.parent !== dyn) continue;
@@ -2131,7 +2135,7 @@ const FX = {
   casings: new Debris(CY(0.0085, 0.0085, 0.032, 8), MAT.brass, 260, { bounce: 0.45 }),
   chips: new Debris(BX(0.035, 0.028, 0.03), std({ color: 0xffffff, roughness: 0.9 }), 360, { colors: true, bounce: 0.2 }),
   planks: new Debris(BX(0.9, 0.025, 0.12), MAT.crate, 80, { bounce: 0.25, drag: 0.1, shadow: true }),
-  feathers: new Debris(new THREE.PlaneGeometry(0.07, 0.14), new THREE.MeshStandardMaterial({ map: TEX.feather, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.9, color: 0xf6f2ea }), 520, { flutter: 9, drag: 2.6, grav: 2.4, bounce: 0 }),
+  feathers: new Debris(new THREE.PlaneGeometry(0.07, 0.14), new THREE.MeshStandardMaterial({ map: TEX.feather, alphaTest: 0.35, side: THREE.DoubleSide, roughness: 0.9, color: 0xf6f2ea, emissive: 0x3c3a36 }) /* stays pale even when backlit */, 520, { flutter: 9, drag: 2.6, grav: 2.4, bounce: 0 }),
 };
 
 /* ---------- muzzle flash light pool ---------- */
@@ -2286,9 +2290,20 @@ const rain = (() => {
 })();
 
 /* ---------- glints & big sprites ---------- */
+// a lens catching light: tight hot core and a faint horizontal smear, no cartoon star spikes
+TEX.glint = (() => {
+  const W = 256, H = 64, [c, g] = makeCanvas(W, H);
+  const core = g.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, H / 2);
+  core.addColorStop(0, 'rgba(255,255,255,1)'); core.addColorStop(0.18, 'rgba(255,255,255,0.7)'); core.addColorStop(0.5, 'rgba(255,255,255,0.12)'); core.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = core; g.fillRect(W / 2 - H / 2, 0, H, H);
+  const st = g.createLinearGradient(0, 0, W, 0);
+  st.addColorStop(0, 'rgba(255,255,255,0)'); st.addColorStop(0.5, 'rgba(255,255,255,0.35)'); st.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = st; g.fillRect(0, H / 2 - 1.5, W, 3);
+  return canvasTex(c, { repeat: false });
+})();
 function makeGlint(color, scale) {
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.star, color: new THREE.Color(color), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
-  s.scale.setScalar(scale); s.renderOrder = 8; return s;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: TEX.glint, color: new THREE.Color(color), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false }));
+  s.scale.set(scale * 4, scale, 1); s.renderOrder = 8; return s;
 }
 
 /* ---------- 3D muzzle flashes: crossed flame cards along the barrel ---------- */
@@ -2781,16 +2796,52 @@ function ksPluck(midi, dur = 1.5, bright = 0.45) {
   addTo(a, noiseBurst(0.03, 0.005, 0.0005, new BQ('lowpass', 300)), 0, 0.4);
   return peakNorm([fadeOut(a, 0.15)], 0.9)[0];
 }
-function pianoNote(midi, dur = 3.2) {
-  const f0 = mtof(midi), B = 0.00032, modes = [];
-  for (let n = 1; n <= 12; n++) {
-    const fn = n * f0 * Math.sqrt(1 + B * n * n); if (fn > 11000) break;
-    const amp = Math.pow(n, -1.2) * (n === 1 ? 1 : 0.8), tau = (2.6 / (1 + n * 0.45)) * Math.pow(261 / f0, 0.35);
-    modes.push([fn * 1.0004, amp * 0.5, tau], [fn * 0.9996, amp * 0.5, tau * 1.1]);
+// modelled grand piano: stiff-string partials (inharmonic), hammer strike position and felt brightness,
+// 1-3 slightly detuned unison strings that beat, two-stage decay (prompt sound + long aftersound),
+// hammer knock and soundboard thump, dampers at note-off; returns stereo [L, R]
+function pianoNote(midi, dur = 3.2, vel = 0.6) {
+  const f0 = mtof(midi), len = dur + 0.3, N = Math.ceil(len * SRATE);
+  const L = new Float32Array(N), R = new Float32Array(N);
+  const B = 0.00025 * Math.pow(2, (midi - 60) / 12 * 0.9);
+  const nStr = midi < 33 ? 1 : midi < 45 ? 2 : 3;
+  const det = nStr === 1 ? [0] : nStr === 2 ? [-0.8, 0.8] : [-1.1, 0.15, 1.0];
+  const beta = 1 / 8.3, fc = 700 + 4800 * vel * vel + f0 * 1.2;
+  const pan = clamp((midi - 62) / 38, -0.65, 0.65);
+  const tauBase = clamp(3.4 * Math.pow(220 / f0, 0.6), 0.35, 11);
+  const off = Math.round(dur * SRATE), rel = midi < 40 ? 0.35 : 0.12; // dampers
+  for (let n = 1; n <= 48; n++) {
+    const fn = n * f0 * Math.sqrt(1 + B * n * n); if (fn > Math.min(14000, SRATE * 0.45)) break;
+    const amp = Math.abs(Math.sin(Math.PI * n * beta)) * Math.pow(n, -0.85) * Math.exp(-fn / fc);
+    if (amp < 1e-4) continue;
+    const t1 = tauBase / (1 + fn / 1700), t2 = t1 * 3.8, a2 = nStr > 1 ? 0.3 : 0.18;
+    for (let k = 0; k < nStr; k++) {
+      const f = fn * Math.pow(2, (det[k] * (0.6 + Math.random() * 0.8)) / 1200), w = TAU * f / SRATE;
+      const cw = Math.cos(w), sw = Math.sin(w), ph = Math.random() * TAU;
+      let c = Math.cos(ph), sn = Math.sin(ph), e1 = 1, e2 = 1;
+      const d1 = Math.exp(-1 / (t1 * SRATE)), d2 = Math.exp(-1 / (t2 * SRATE));
+      const g = amp / nStr, sp = (k - (nStr - 1) / 2) * 0.15, gl = g * (0.5 - pan * 0.45 - sp), gr = g * (0.5 + pan * 0.45 + sp);
+      const end = Math.min(N, off + Math.round(rel * 6 * SRATE), Math.round(t2 * 9 * SRATE));
+      for (let i = 0; i < end; i++) {
+        const nc = c * cw - sn * sw; sn = c * sw + sn * cw; c = nc;
+        let v = sn * ((1 - a2) * e1 + a2 * e2); e1 *= d1; e2 *= d2;
+        if (i > off) v *= Math.exp(-(i - off) / (rel * SRATE));
+        L[i] += v * gl; R[i] += v * gr;
+      }
+    }
   }
-  const a = modal(dur, modes, 0.0015);
-  addTo(a, noiseBurst(0.03, 0.004, 0.0003, new BQ('lowpass', 2500)), 0, 0.12);
-  return peakNorm([fadeOut(a, 0.3)], 0.9)[0];
+  // hammer contact softens the very front of the note, harder for loud notes
+  const att = 0.0035 - 0.0025 * vel;
+  for (let i = 0; i < Math.min(N, SRATE * 0.02); i++) { const k = 1 - Math.exp(-i / (att * SRATE)); L[i] *= k; R[i] *= k; }
+  const knock = noiseBurst(0.04, 0.006, 0.0004, new BQ('lowpass', 900 + 2600 * vel), new BQ('highpass', 120));
+  const board = modal(0.25, [[96, 1, 0.06], [178, 0.6, 0.05], [262, 0.4, 0.04], [415, 0.25, 0.03]], 0.001);
+  const kg = 0.05 * vel * (midi < 48 ? 1.6 : 1), bg = 0.035 * vel * (midi < 48 ? 1.8 : 0.8);
+  for (let i = 0; i < knock.length && i < N; i++) { L[i] += knock[i] * kg; R[i] += knock[i] * kg; }
+  for (let i = 0; i < board.length && i < N; i++) { L[i] += board[i] * bg; R[i] += board[i] * bg; }
+  const eqL = [new BQ('peak', 240, 0.9, 2.5), new BQ('peak', 3200, 1.2, -2)], eqR = [new BQ('peak', 240, 0.9, 2.5), new BQ('peak', 3200, 1.2, -2)];
+  chain(L, ...eqL); chain(R, ...eqR);
+  peakNorm([L, R], 0.9 * (0.4 + 0.6 * vel));
+  fadeOut(L, 0.05); fadeOut(R, 0.05);
+  return [L, R];
 }
 function metalNoise(len, base, tau, hp = 6000, attack = 0.0005) { // 6 square oscillators at inharmonic ratios (classic cymbal)
   const a = mkb(len), r = [1, 1.483, 1.932, 2.546, 2.630, 3.897], ph = r.map(() => Math.random());
@@ -2824,7 +2875,8 @@ async function renderScore(D) {
   const sample = (buf, t, g = 1, { pan = 0, wet = 0.3, rate = 1 } = {}) => { if (t < 0) return; const s = O.createBufferSource(); s.buffer = buf instanceof AudioBuffer ? buf : toAB([buf]); s.playbackRate.value = rate; const gg = O.createGain(); gg.gain.value = g; s.connect(gg); out(gg, pan, wet); s.start(t); };
   const bufs = {}; for (const k of Object.keys(D)) if (D[k] instanceof Float32Array) bufs[k] = toAB([D[k]]);
   const hit = (k, t, g = 1, o) => sample(bufs[k], t, g, o);
-  const pcache = {}, piano = (t, m, g = 0.3, o) => sample(pcache[m] || (pcache[m] = toAB([pianoNote(m)])), t, g, Object.assign({ wet: 0.5 }, o));
+  const pcache = {}, piano = (t, m, g = 0.3, o = {}) => { const v = o.vel ?? 0.6, d = o.dur ?? 3.2, key = m + '|' + v + '|' + d; sample(pcache[key] || (pcache[key] = toAB(pianoNote(m, d, v))), t, g, Object.assign({ wet: 0.5 }, o)); };
+  const roll = (t, ms, g, o = {}) => ms.forEach((m, i) => piano(t + i * (o.spread ?? 0.028), m, g, o)); // rolled chord, bottom up
   const kcache = {}, pizz = (t, m, g = 0.5) => sample(kcache[m] || (kcache[m] = toAB([ksPluck(m)])), t, g, { wet: 0.2 });
   const tcache = {}, timp = (t, m, g = 0.5) => sample(tcache[m] || (tcache[m] = toAB([D.timp(m)])), t, g, { wet: 0.4 });
   const env = (g, t, dur, peak, a, r) => { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.setValueAtTime(peak, Math.max(t + a, t + dur - r)); g.gain.linearRampToValueAtTime(0, t + dur); };
@@ -2872,10 +2924,14 @@ async function renderScore(D) {
   }
   // ---- 0.0 night harbour: low drone, sparse high piano
   strings(0.0, 5.2, [26, 38], { g: 0.05, a: 2.5, r: 1.5, lp: 600 });
-  [[1.6, 86, 0.18], [2.5, 87, 0.12], [3.4, 81, 0.12], [4.6, 74, 0.1]].forEach(([t, m, g]) => piano(t, m, g, { wet: 0.8, pan: 0.3 }));
+  // a lone noir phrase: D minor with the 9th rubbing against the third, ending on the unresolved leading tone
+  roll(1.0, [38, 50, 57, 64, 65], 0.2, { vel: 0.3, dur: 4.6, wet: 0.7, spread: 0.045 });
+  [[1.85, 81, 0.75], [2.5, 77, 0.6], [3.1, 76, 0.6], [3.75, 74, 0.8], [4.55, 73, 2.0]].forEach(([t, m, d], i) => piano(t, m, 0.3, { vel: 0.42 - i * 0.03, dur: d + 0.4, wet: 0.75 }));
   // ---- 10.2 arrival: ominous low piano ostinato, tremolo cluster
-  for (let t = 10.25; t < 12.6; t += 0.8) { piano(t, 26, 0.35, { wet: 0.4 }); piano(t, 38, 0.25, { wet: 0.4 }); }
-  for (let t = 12.6; t < 14.4; t += 0.6) { piano(t, 26, 0.38, { wet: 0.4 }); piano(t, 38, 0.28, { wet: 0.4 }); hit('heart', t + 0.3, 0.5, { wet: 0.1 }); }
+  // low octave pulse; the top note slips up a semitone and back like something circling
+  let pk = 0;
+  for (let t = 10.25; t < 12.6; t += 0.8, pk++) { piano(t, 26, 0.42, { vel: 0.7, dur: 0.75, wet: 0.35 }); piano(t, pk % 4 === 3 ? 39 : 38, 0.3, { vel: 0.6, dur: 0.75, wet: 0.35 }); }
+  for (let t = 12.6; t < 14.4; t += 0.6, pk++) { piano(t, 26, 0.45, { vel: 0.78, dur: 0.55, wet: 0.35 }); piano(t, pk % 2 ? 39 : 38, 0.32, { vel: 0.68, dur: 0.55, wet: 0.35 }); hit('heart', t + 0.3, 0.5, { wet: 0.1 }); }
   strings(10.2, 7.6, [50, 51], { g: 0.025, trem: 11, swell: 1, lp: 2000 });
   strings(12.6, 5.2, [57, 58], { g: 0.02, trem: 13, swell: 1, lp: 2400, pan: 0.2 });
   braam(14.4, 2.6, 26, 0.085);
@@ -2912,7 +2968,8 @@ async function renderScore(D) {
   sub(32.8, 5.8, 14, 0.22);
   strings(33.0, 5.6, [74, 77, 81], { g: 0.02, a: 1.5, r: 1.2, lp: 3200 });
   strings(33.0, 5.6, [38, 45], { g: 0.04, a: 1.0, r: 1.0, lp: 500 });
-  [[33.6, 74], [34.5, 69], [35.5, 77], [36.4, 76], [37.2, 74]].forEach(([t, m]) => piano(t, m, 0.22, { wet: 0.85 }));
+  roll(33.2, [38, 45, 53, 57, 64], 0.16, { vel: 0.28, dur: 5.4, wet: 0.85, spread: 0.06 });
+  [[33.6, 74], [34.5, 69], [35.5, 77], [36.4, 76], [37.2, 74]].forEach(([t, m]) => { piano(t, m, 0.3, { vel: 0.45, dur: 1.6, wet: 0.85 }); piano(t, m + 12, 0.07, { vel: 0.3, dur: 1.2, wet: 0.9 }); });
   for (let t = 33.4; t < 38.2; t += 1.4) hit('heart', t, 0.8, { rate: 0.75, wet: 0.3 });
   hit('revCrash', 38.6 - 2.2, 0.5);
   // ---- 38.6 back to speed
@@ -2927,12 +2984,12 @@ async function renderScore(D) {
   shepard(46.0, 7.0, 0.035, 2.2);
   for (let t = 44.0, step = 0.5; t < 53.0; t += step, step = Math.max(0.18, step * 0.975)) hit('hat', t, 0.2, { wet: 0.15 });
   for (let t = 46.0, step = 1.0; t < 53.0; t += step, step = Math.max(0.55, step * 0.96)) hit('heart', t, 0.7, { wet: 0.1 });
-  [[47.42, [26, 27, 33]], [49.75, [26, 27, 32]], [50.95, [25, 26, 31]]].forEach(([t, ms]) => ms.forEach(m => piano(t, m, 0.4, { wet: 0.5 })));
+  [[47.42, [26, 27, 33]], [49.75, [26, 27, 32]], [50.95, [25, 26, 31]]].forEach(([t, ms]) => ms.forEach(m => piano(t, m, 0.42, { vel: 0.9, dur: 2.6, wet: 0.5 })));
   // ---- 53.0 the smirk: near silence
   strings(53.0, 3.1, [81], { g: 0.016, ponti: true, trem: 15, swell: 1, a: 0.5 });
   sub(53.0, 3.0, 14, 0.1);
   for (let t = 53.2; t < 56; t += 0.85) hit('heart', t, 0.85, { wet: 0.1 });
-  [55.02].forEach(t => { [25, 26, 32].forEach(m => piano(t, m, 0.5, { wet: 0.5 })); strings(t, 0.9, [74, 75], { g: 0.02, ponti: true, a: 0.02, r: 0.6 }); });
+  [55.02].forEach(t => { [25, 26, 32].forEach(m => piano(t, m, 0.5, { vel: 0.95, dur: 3.0, wet: 0.5 })); strings(t, 0.9, [74, 75], { g: 0.02, ponti: true, a: 0.02, r: 0.6 }); });
   // ---- 56.0 the call: clock ticks, held breath, then nothing
   sub(56.0, 5.6, 26, 0.12);
   strings(57.8, 3.8, [62, 63, 68], { g: 0.03, trem: 10, swell: 1, lp: 2800 });
@@ -2964,10 +3021,10 @@ async function renderJazz(D) { // the gramophone in the back room (4.2 s → 18.
   const lp = O.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4800; lp.Q.value = 0.9;
   const pk = O.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1500; pk.gain.value = 5;
   bus.connect(hp); hp.connect(pk); pk.connect(lp); lp.connect(O.destination);
-  const smp = (b, t, g, rate = 1) => { const s = O.createBufferSource(); s.buffer = b instanceof AudioBuffer ? b : toAB([b]); s.playbackRate.value = rate; const gg = O.createGain(); gg.gain.value = g; s.connect(gg); gg.connect(bus); s.start(t); };
+  const smp = (b, t, g, rate = 1) => { t = Math.max(0, t); const s = O.createBufferSource(); s.buffer = b instanceof AudioBuffer ? b : toAB([b]); s.playbackRate.value = rate; const gg = O.createGain(); gg.gain.value = g; s.connect(gg); gg.connect(bus); s.start(t); };
   const beat = 0.625, bars = [[38, 40, 41, 42], [43, 47, 50, 49], [48, 45, 41, 38], [33, 37, 40, 43]];
   const voic = [[53, 57, 60, 64], [53, 59, 64], [53, 57, 60, 64], [55, 61, 65, 70]];
-  const pc = {}, pn = m => pc[m] || (pc[m] = toAB([pianoNote(m, 1.4)]));
+  const pc = {}, pn = (m, v = 0.45, d = 1.4) => { const k = m + '|' + v + '|' + d; return pc[k] || (pc[k] = toAB(pianoNote(m, d, v))); };
   const kc = {}, kn = m => kc[m] || (kc[m] = toAB([ksPluck(m, 1.2, 0.35)]));
   for (let i = 0; i * beat < 14.0; i++) {
     const t = i * beat, bar = Math.floor(i / 4) % 4, b = i % 4;
@@ -2976,7 +3033,18 @@ async function renderJazz(D) { // the gramophone in the back room (4.2 s → 18.
     smp(D.brushSwirl, t, 0.5); if (b % 2) smp(D.brushSlap, t, 0.55);
     smp(D.ride, t, 0.35); if (b % 2) smp(D.ride, t + beat * 0.66, 0.22);
     smp(D.kick, t, 0.12);
-    if (b === 1 || (b === 3 && bar % 2)) voic[bar].forEach(m => smp(pn(m), t + beat * 0.5, 0.11));
+    if (b === 1 || (b === 3 && bar % 2)) voic[bar].forEach((m, k) => smp(pn(m, 0.38), t + beat * 0.5 + k * 0.012, 0.1));
+  }
+  // right hand: a lazy swung line over Dm9 | G13 | Fmaj7 | A7alt (positions in beats; swing eighths land on .67)
+  const LINE = [
+    [[0, 69, 1.5], [1.67, 72, 0.33], [2, 74, 0.67], [2.67, 76, 0.33], [3, 77, 1]],
+    [[0, 76, 1], [1, 74, 0.67], [1.67, 71, 0.33], [2, 69, 1], [3, 67, 0.67], [3.67, 69, 0.33]],
+    [[0.67, 69, 0.33], [1, 72, 0.67], [1.67, 76, 0.33], [2, 77, 0.67], [2.67, 76, 0.33], [3, 74, 1]],
+    [[0, 73, 1.5], [1.67, 70, 0.33], [2, 69, 0.67], [2.67, 65, 0.33], [3, 64, 1]],
+  ];
+  for (let bar = 0; bar * 4 * beat < 13.8; bar++) for (const [pos, m, d] of LINE[bar % 4]) {
+    const t = Math.max(0, (bar * 4 + pos) * beat + (Math.random() - 0.5) * 0.02), v = (pos % 1 ? 0.42 : 0.55) + (bar >= 4 ? 0.05 : 0);
+    if (t < 13.9) smp(pn(m + (bar >= 4 && m < 70 ? 12 : 0), +v.toFixed(2), Math.max(0.35, d * beat * 1.1)), t, 0.2);
   }
   // vinyl crackle
   const cr = mkb(len); for (let k = 0; k < len * 40; k++) addTo(cr, noiseBurst(0.004, 0.0008, 0.0001, new BQ('highpass', 2000)), Math.random() * len, 0.25 * Math.random() ** 2);
@@ -3178,7 +3246,7 @@ const sniper = new Pelican('sniper', { scale: 1.02, name: 'sniper' });
 const leader = new Pelican('leader', { scale: 1.1, gun: 'tommy', name: 'leader' });
 const cigar = makeCigar();
 const rifle = makeSniperRifle(); dyn.add(rifle);
-const scopeGlint = makeGlint(0xbfe0ff, 0.9); rifle.userData.glint.add(scopeGlint);
+const scopeGlint = makeGlint(0xd8ecff, 0.16); rifle.userData.glint.add(scopeGlint);
 
 for (let i = 0; i < 3; i++) makeSedan();
 const CAR_X = [-7, 1, 9], CAR_Z = 3.0;
@@ -3595,21 +3663,23 @@ function muzzleBlast() {
   const m = rifle.userData.muzzle.getWorldPosition(v3());
   const b = rifle.userData.brake.getWorldPosition(v3());
   const d = SNIPE.dir, side = v3().crossVectors(d, UPV).normalize();
-  FX.muzzle.spawn(m, d, 2.4, 0.12, 1.2);
-  for (const s of [-1, 1]) FX.muzzle.spawn(b, side.clone().multiplyScalar(s).addScaledVector(d, -0.25).normalize(), 1.5, 0.1, 1.1);
-  for (let i = 0; i < 4; i++) FX.flash.spawn(m.clone().addScaledVector(d, 0.3 + i * 0.5), null, { life: 0.14, size: 3.0 - i * 0.6, color: [4, 3, 1.8], mode: 1 });
+  // a braked rifle: short forward plume, most of the gas thrown sideways out of the brake ports
+  FX.muzzle.spawn(m, d, 1.1, 0.07, 1.4);
+  for (const s of [-1, 1]) FX.muzzle.spawn(b, side.clone().multiplyScalar(s).addScaledVector(d, -0.15).normalize(), 1.0, 0.07, 1.5);
+  FX.glow.spawn(m.clone().addScaledVector(d, 0.2), null, { life: 0.06, size: 0.8, color: [3, 2.2, 1.3], mode: 1 });
+  FX.glow.spawn(b, null, { life: 0.12, size: 2.0, color: [0.7, 0.5, 0.32], mode: 1 });
   for (let i = 0; i < 30; i++) {
     const a = RR(0, TAU), v = v3(Math.cos(a), RR(0, 0.35), Math.sin(a)).multiplyScalar(RR(2, 7)).addScaledVector(d, RR(2, 6));
     FX.smoke.spawn(b, v, { life: RR(1.5, 3.2), size: 0.4, size1: RR(1.6, 3.2), color: [0.62, 0.62, 0.64], alpha: 0.34, drag: 1.4 });
   }
   const roof = v3(m.x, TOWER.top + 0.02, m.z);
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < 70; i++) { // rainwater blown off the parapet by the blast
     const a = RR(0, TAU), r = RR(0, 1.6);
-    FX.glow.spawn(roof.clone().add(v3(Math.cos(a) * r - d.x, 0, Math.sin(a) * r - d.z)), v3(Math.cos(a) * RR(4, 11), RR(1, 4), Math.sin(a) * RR(4, 11)), { life: RR(0.5, 1.2), size: RR(0.03, 0.07), color: [0.8, 0.9, 1.1], alpha: 0.9, grav: 9.8, drag: 0.8, mode: 1 });
+    FX.glow.spawn(roof.clone().add(v3(Math.cos(a) * r - d.x, 0, Math.sin(a) * r - d.z)), v3(Math.cos(a) * RR(4, 11), RR(1, 4), Math.sin(a) * RR(4, 11)), { life: RR(0.4, 0.9), size: RR(0.012, 0.03), color: [0.5, 0.55, 0.65], alpha: 0.7, grav: 9.8, drag: 0.8, mode: 1 });
   }
   rain.blastT = STATE.S; rain.uni.uBlast.value.set(m.x, m.y, m.z, 0);
-  flashLight(m.clone().addScaledVector(d, 0.6), 1400, 0xffc070, 0.12);
-  towerClock.flash = 1;
+  flashLight(m.clone().addScaledVector(d, 0.6), 110, 0xffc070, 0.05); // a bright pop on the parapet, not a white-out
+  towerClock.flash = 0.25;
 }
 function sniperFire() {
   muzzleBlast();
@@ -3619,10 +3689,10 @@ function sniperFire() {
 }
 function towerFlash() {
   const m = rifle.userData.muzzle.getWorldPosition(v3());
-  FX.flash.spawn(m, null, { life: 0.16, size: 6, color: [5, 3.6, 2], mode: 1 });
-  FX.flash.spawn(m, null, { life: 0.3, size: 14, color: [1.2, 0.8, 0.5], mode: 1 });
-  FX.muzzle.spawn(m, SNIPE.dir, 2.4, 0.1, 1.2);
-  flashLight(m, 1400, 0xffc070, 0.1); towerClock.flash = 1;
+  FX.glow.spawn(m, null, { life: 0.08, size: 2.2, color: [4, 3, 1.8], mode: 1 });
+  FX.glow.spawn(m, null, { life: 0.2, size: 6, color: [0.9, 0.6, 0.38], mode: 1 });
+  FX.muzzle.spawn(m, SNIPE.dir, 1.1, 0.07, 1.1);
+  flashLight(m, 400, 0xffc070, 0.06); towerClock.flash = 0.4;
   STATE.recoilT = STATE.T;
 }
 
@@ -3999,7 +4069,9 @@ function directSniper(T, S) {
     const rk = STATE.recoilT !== undefined && T >= STATE.recoilT ? Math.exp(-(T - STATE.recoilT) * 7) : 0;
     rifle.position.copy(SNIPE.grip).addScaledVector(SNIPE.dir, -0.14 * rk).y += 0.035 * rk + br * 0.006;
     sniper.root.position.addScaledVector(SNIPE.dir, -0.09 * rk);
-    scopeGlint.material.opacity = 0.6 + Math.sin(S * 2.3) * 0.25;
+    // the glint only shows to someone looking down the barrel (the street), not from the side
+    const gp = scopeGlint.getWorldPosition(_v1), facing = Math.max(0, _v2.copy(camera.position).sub(gp).normalize().dot(SNIPE.dir));
+    scopeGlint.material.opacity = Math.pow(facing, 8) * (0.7 + Math.sin(S * 2.3) * 0.2);
     SNIPE.breath = br;
   } else {
     sniper.place(SNIPE.stand.x, SNIPE.stand.z, SNIPE.yaw, TOWER.top);
@@ -4306,15 +4378,7 @@ const cine = new ShaderPass({
         vec2 p = uv - f.xy; p.x *= uAspect;
         float streak = exp(-abs(p.y) * 240.0) * exp(-abs(p.x) * 2.4);
         float glow = exp(-length(p) * 26.0) * 0.5 + exp(-length(p) * 7.0) * 0.05;
-        vec2 axis = vec2(0.5) - f.xy;
-        float gh = 0.0;
-        for (int k = 1; k <= 3; k++) {
-          vec2 q = uv - (f.xy + axis * (0.55 * float(k) + 0.2)); q.x *= uAspect;
-          gh += (1.0 - smoothstep(0.0, 0.03 * float(k), length(q))) * 0.08;
-        }
-        vec2 q = uv - (f.xy + axis * 2.0); q.x *= uAspect;
-        float ring = (1.0 - smoothstep(0.0, 0.012, abs(length(q) - 0.14))) * 0.04;
-        col += uFlC[i] * I * (streak * vec3(0.7, 0.85, 1.25) + glow + (gh + ring) * vec3(0.5, 0.8, 1.0));
+        col += uFlC[i] * I * (streak * vec3(0.7, 0.85, 1.25) + glow);
       }
       gl_FragColor = vec4(col, 1.0);
     }`,
