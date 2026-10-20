@@ -51,7 +51,6 @@ slow-motion wheelie).
   air absorption per source; slow-motion pitch drop and shell-shock tinnitus after close blasts.
 - Tension devices: rising Shepard tones, a heartbeat that speeds up, a ticking clock and
   church-bell toll, the sniper's breathing, radio static, and moments of near silence.
-- A diegetic gramophone jazz track in the back room and a noir score that resolves into a
-  D-major finale.
+- A noir score of strings, brass and percussion that resolves into a D-major finale.
 
 Adaptive resolution keeps the frame rate smooth on slower GPUs.

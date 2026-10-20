@@ -2424,9 +2424,8 @@ addRipples(MAT.water, { water: true, scale: 1.4, strength: 0.35 });
 
 /* =====================================================================
    Sound — every sample is synthesised in code at load time:
-   SFX are rendered into buffer banks (several takes each), the score and
-   the gramophone jazz are rendered offline as tracks locked to the film
-   clock, and a live mixer adds distance, street/room reverb, ducking,
+   SFX are rendered into buffer banks (several takes each), the score is
+   rendered offline as a track locked to the film clock, and a live mixer adds distance, street/room reverb, ducking,
    slow-motion pitch and shell-shock.
    ===================================================================== */
 const SRATE = 44100;
@@ -2750,11 +2749,7 @@ function woodSmash() {
   for (let k = 0; k < 20; k++) addTo(a, noiseBurst(0.05, 0.01, 0.0005, new BQ('bandpass', jit(1500, 0.5), 1)), 0.2 + Math.random() * 0.8, 0.12 * Math.random());
   return peakNorm([a], 0.9)[0];
 }
-function needleScratch() {
-  const a = mkb(0.6), bp = new BQ('bandpass', 1800, 3);
-  for (let i = 0; i < a.length; i++) { const t = i / SRATE; if ((i & 15) === 0) bp.set('bandpass', 2600 - 2200 * (t / 0.6), 2.5); a[i] = bp.p(nz()) * (1 - t / 0.6) * (1 + 0.6 * Math.sin(t * 160)); }
-  return peakNorm([a], 0.7)[0];
-}
+
 function whooshLong(len) {
   const a = mkb(len), bp = new BQ('bandpass', 300, 1.5); let ph = 0;
   for (let i = 0; i < a.length; i++) { const t = i / SRATE, u = t / len; if ((i & 15) === 0) bp.set('bandpass', 250 + 2200 * u * u, 1.8); ph += (40 + 50 * u) / SRATE; a[i] = (bp.p(nz()) * 1.4 + Math.sin(TAU * ph) * 0.5) * Math.sin(Math.PI * Math.min(1, u * 1.05)) ** 0.8; }
@@ -2808,9 +2803,6 @@ function drumBank() {
   D.taiko = tom(62, 0.38, 1.2); D.tomLo = tom(85, 0.22); D.tomHi = tom(130, 0.15); D.kick = tom(48, 0.16, 0.5);
   D.snare = (() => { const a = noiseBurst(0.35, 0.06, 0.0005, new BQ('highpass', 900)); addTo(a, modal(0.2, [[185, 1, 0.05], [330, 0.5, 0.03]]), 0, 0.8); return peakNorm([a], 0.8)[0]; })();
   D.rim = peakNorm([modal(0.15, [[1700, 1, 0.015], [3400, 0.4, 0.01]])], 0.5)[0];
-  D.brushSlap = peakNorm([noiseBurst(0.25, 0.05, 0.003, new BQ('bandpass', 3500, 0.6))], 0.5)[0];
-  D.brushSwirl = (() => { const a = noiseBurst(0.6, 0.6, 0.15, new BQ('bandpass', 4500, 0.7)); for (let i = 0; i < a.length; i++) a[i] *= Math.sin(Math.PI * i / a.length); return peakNorm([a], 0.35)[0]; })();
-  D.ride = (() => { const a = metalNoise(2.4, 520, 0.7, 5000); addTo(a, modal(1.2, [[3400, 1, 0.35], [5100, 0.5, 0.2]]), 0, 0.25); return peakNorm([a], 0.45)[0]; })();
   D.hat = peakNorm([metalNoise(0.12, 600, 0.025, 8000)], 0.35)[0];
   D.crash = peakNorm([metalNoise(3.5, 450, 1.3, 3500, 0.002)], 0.7)[0];
   D.revCrash = D.crash.slice(0, Math.round(2.2 * SRATE)).reverse();
@@ -2956,55 +2948,6 @@ async function renderScore(D) {
   const res = await O.startRendering();
   return res;
 }
-// jazz ride: a cloud of inharmonic partials (no square waves), a bell ping and the stick tick
-function jazzRide(len = 2.2) {
-  const a = mkb(len), n = a.length;
-  for (let k = 0; k < 70; k++) {
-    const f = 380 * Math.pow(30, Math.random()), amp = (f < 1200 ? 0.35 : 1) * (0.4 + Math.random() * 0.6) * Math.pow(3000 / f, 0.25);
-    const tau = (0.35 + Math.random() * 1.3) * Math.pow(2500 / f, 0.35), w = TAU * f / SRATE, cw = Math.cos(w), sw = Math.sin(w), d = Math.exp(-1 / (tau * SRATE));
-    let c = Math.cos(Math.random() * TAU), sn = Math.sqrt(1 - c * c), e = amp;
-    for (let i = 0; i < n && e > 1e-4; i++) { const nc = c * cw - sn * sw; sn = c * sw + sn * cw; c = nc; a[i] += sn * e; e *= d; }
-  }
-  chain(a, new BQ('highpass', 450, 0.6));
-  addTo(a, modal(1.2, [[2870, 1, 0.5], [4130, 0.55, 0.38], [6250, 0.3, 0.25]], 0.0004), 0, 1.6);
-  addTo(a, noiseBurst(0.03, 0.004, 0.0002, new BQ('highpass', 3500)), 0, 2.5);
-  return peakNorm([fadeOut(a, 0.2)], 0.8)[0];
-}
-async function renderJazz(D) { // the gramophone in the back room (4.2 s → 18.35 s, then the needle scratch)
-  const len = 14.8, O = new OfflineAudioContext(2, Math.ceil(len * SRATE), SRATE);
-  // a 78 on a horn gramophone: narrow but not tinny, a little warmth from the horn, a small room around it
-  const bus = O.createGain(); bus.gain.value = 0.8;
-  const hp = O.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 75; hp.Q.value = 0.5;
-  const pk = O.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1100; pk.Q.value = 0.7; pk.gain.value = 2;
-  const lp = O.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500; lp.Q.value = 0.6;
-  const ws = O.createWaveShaper(); { const c = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; c[i] = Math.tanh(x * 1.4) / Math.tanh(1.4); } ws.curve = c; }
-  const room = O.createConvolver(); room.buffer = toAB(makeIR(0.9, { tau: 0.28, bright: 3500, dark: 1200, pre: 0.008 })); const rg = O.createGain(); rg.gain.value = 0.18;
-  bus.connect(hp); hp.connect(pk); pk.connect(lp); lp.connect(ws); ws.connect(O.destination); ws.connect(room); room.connect(rg); rg.connect(O.destination);
-  const smp = (b, t, g, rate = 1) => { t = Math.max(0, t); const s = O.createBufferSource(); s.buffer = b instanceof AudioBuffer ? b : toAB([b]); s.playbackRate.value = rate; const gg = O.createGain(); gg.gain.value = g; s.connect(gg); gg.connect(bus); s.start(t); };
-  const beat = 0.625, sw = beat * 0.67, bars = [[38, 40, 41, 42], [43, 47, 50, 49], [48, 45, 41, 38], [33, 37, 40, 43]];
-  const kc = {}, kn = m => kc[m] || (kc[m] = toAB([ksPluck(m, 0.9, 0.3)]));
-  const ride = toAB([jazzRide()]);
-  const chick = toAB([noiseBurst(0.06, 0.01, 0.001, new BQ('bandpass', 6500, 1.2))]);
-  const swish = toAB([(() => { const a = noiseBurst(beat * 2, beat * 2, 0.08, new BQ('bandpass', 4200, 0.8)); for (let i = 0; i < a.length; i++) a[i] *= Math.sin(Math.PI * i / a.length) ** 1.5; return peakNorm([a], 0.4)[0]; })()]);
-  for (let i = 0; i * beat < 14.0; i++) {
-    const t = i * beat + (Math.random() - 0.5) * 0.008, bar = Math.floor(i / 4) % 4, b = i % 4;
-    smp(kn(bars[bar][b]), t, b % 2 ? 0.62 : 0.7);                                     // walking bass, slightly heavier on 1 and 3
-    if (b === 3 && Math.floor(i / 4) % 2) smp(kn(bars[(bar + 1) % 4][0] + 1), t + sw, 0.3); // chromatic skip into the next bar
-    smp(ride, t, b % 2 ? 0.2 : 0.15);                                                   // ding... ding-da ding
-    if (b % 2) { smp(ride, t + sw, 0.11); smp(chick, t, 0.12); smp(D.brushSlap, t, 0.16); }
-    if (b % 2 === 0) smp(swish, t, 0.3);                                                // brush circling the snare, one sweep per two beats
-  }
-  // vinyl crackle
-  const cr = mkb(len); for (let k = 0; k < len * 12; k++) addTo(cr, noiseBurst(0.003, 0.0006, 0.0001, new BQ('highpass', 2500)), Math.random() * len, 0.1 * Math.random() ** 2);
-  addTo(cr, chain(pinkNoise(len), new BQ('bandpass', 3000, 0.6)), 0, 0.004);
-  smp(cr, 0, 1);
-  smp(needleScratch(), 14.15, 1.2);
-  const res = await O.startRendering();
-  // cut everything after the scratch
-  for (let c = 0; c < 2; c++) { const d = res.getChannelData(c); for (let i = Math.round(14.3 * SRATE); i < d.length; i++) d[i] *= Math.max(0, 1 - (i / SRATE - 14.3) / 0.15); }
-  return res;
-}
-
 /* ---------- live mixer ---------- */
 const SND = {
   ctx: null, on: false, muted: false, silent: false, ready: false, pending: false, bank: {}, last: {},
@@ -3028,10 +2971,9 @@ const SND = {
       const mark = k => { const n = performance.now(); tm.push([k, Math.round(n - tl)]); tl = n; };
       for (const [i, s] of steps.entries()) { s(); mark('step' + i); await yieldUI(); }
       const D = drumBank(); mark('drums'); await yieldUI();
-      this.jazz = await renderJazz(D); mark('jazz');
       this.score = await renderScore(D); mark('score');
-      // master both tracks to a safe peak
-      for (const b of [this.jazz, this.score]) { const chs = [0, 1].map(c => b.getChannelData(c)); peakNorm(chs, 0.92); }
+      // master the score to a safe peak
+      peakNorm([0, 1].map(c => this.score.getChannelData(c)), 0.92);
       this.ready = true;
       if (this.pending) this.start();
     } catch (e) { console.error(e); document.getElementById('err').textContent = 'Sound failed to prepare: ' + e.message; }
@@ -3051,9 +2993,6 @@ const SND = {
     const conv = (b, g) => { const v = c.createConvolver(); v.buffer = resampleAB(b, c.sampleRate); const vg = G(g); v.connect(vg); vg.connect(this.out); return v; };
     this.vStreet = conv(this.bank.irStreet, 0.9); this.vRoom = conv(this.bank.irRoom, 0.7); this.vCity = conv(this.bank.irCity, 1.0);
     this.duck = G(1); this.musicG = G(0.62); this.musicG.connect(this.duck); this.duck.connect(this.out);
-    this.jazzLP = c.createBiquadFilter(); this.jazzLP.type = 'lowpass'; this.jazzLP.frequency.value = 900;
-    this.jazzG = G(0.5); this.jazzLP.connect(this.jazzG); this.jazzG.connect(this.out);
-    const jv = G(0.25); this.jazzG.connect(jv); jv.connect(this.vRoom);
     this.ambLP = c.createBiquadFilter(); this.ambLP.type = 'lowpass'; this.ambLP.frequency.value = 16000;
     this.amb = G(0.2); this.ambLP.connect(this.amb); this.amb.connect(this.out);
     this.rainSrc = c.createBufferSource(); this.rainSrc.buffer = this.bank.rain; this.rainSrc.loop = true; this.rainSrc.connect(this.ambLP); this.rainSrc.start();
@@ -3081,11 +3020,9 @@ const SND = {
   syncTo(T) {
     if (!this.on) return;
     const c = this.ctx, now = c.currentTime + 0.03;
-    for (const k of ['musicSrc', 'jazzSrc']) if (this[k]) { try { this[k].stop(); } catch (e) { } this[k].disconnect(); this[k] = null; }
+    for (const k of ['musicSrc']) if (this[k]) { try { this[k].stop(); } catch (e) { } this[k].disconnect(); this[k] = null; }
     this.t0Film = T; this.t0Ctx = now;
     this.musicSrc = c.createBufferSource(); this.musicSrc.buffer = this.score; this.musicSrc.connect(this.musicG); this.musicSrc.start(now, Math.min(T, DURATION - 0.01));
-    const jt = T - 4.2;
-    if (jt < this.jazz.duration) { this.jazzSrc = c.createBufferSource(); this.jazzSrc.buffer = this.jazz; this.jazzSrc.connect(this.jazzLP); this.jazzSrc.start(now + Math.max(0, -jt), Math.max(0, jt)); }
   },
   where(pos) {
     if (!pos) return { g: 1, pan: 0, lp: 18000, d: 0, inside: false };
@@ -3143,10 +3080,6 @@ const SND = {
     this.roofG.gain.setTargetAtTime(sh.tower ? 0.3 : 0, now, 0.2);
     const rr = ts < 0.6 ? 0.45 + ts * 0.6 : 1;
     this.rainSrc.playbackRate.setTargetAtTime(rr, now, 0.15); this.roofSrc.playbackRate.setTargetAtTime(rr, now, 0.15);
-    // the gramophone: clear inside the room, muffled through the walls
-    const jazzIn = inside || sh.name === 'aerial' && STATE.T > 5.6;
-    this.jazzLP.frequency.setTargetAtTime(jazzIn ? 6000 : 700, now, 0.15);
-    this.jazzG.gain.setTargetAtTime(jazzIn ? 0.55 : sh.name === 'aerial' ? 0.05 + smooth(2, 6, STATE.T) * 0.2 : 0.22, now, 0.2);
     for (let i = 0; i < 3; i++) {
       const e = this.engines[i], car = cars[i], w = this.where(car.root.position);
       e.eg.gain.setTargetAtTime(this.silent ? 0 : car.engine * 0.35 * w.g * (inside ? 0.4 : 1), now, 0.08);
