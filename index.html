@@ -3014,41 +3014,47 @@ async function renderScore(D) {
   const res = await O.startRendering();
   return res;
 }
+// jazz ride: a cloud of inharmonic partials (no square waves), a bell ping and the stick tick
+function jazzRide(len = 2.2) {
+  const a = mkb(len), n = a.length;
+  for (let k = 0; k < 70; k++) {
+    const f = 380 * Math.pow(30, Math.random()), amp = (f < 1200 ? 0.35 : 1) * (0.4 + Math.random() * 0.6) * Math.pow(3000 / f, 0.25);
+    const tau = (0.35 + Math.random() * 1.3) * Math.pow(2500 / f, 0.35), w = TAU * f / SRATE, cw = Math.cos(w), sw = Math.sin(w), d = Math.exp(-1 / (tau * SRATE));
+    let c = Math.cos(Math.random() * TAU), sn = Math.sqrt(1 - c * c), e = amp;
+    for (let i = 0; i < n && e > 1e-4; i++) { const nc = c * cw - sn * sw; sn = c * sw + sn * cw; c = nc; a[i] += sn * e; e *= d; }
+  }
+  chain(a, new BQ('highpass', 450, 0.6));
+  addTo(a, modal(1.2, [[2870, 1, 0.5], [4130, 0.55, 0.38], [6250, 0.3, 0.25]], 0.0004), 0, 1.6);
+  addTo(a, noiseBurst(0.03, 0.004, 0.0002, new BQ('highpass', 3500)), 0, 2.5);
+  return peakNorm([fadeOut(a, 0.2)], 0.8)[0];
+}
 async function renderJazz(D) { // the gramophone in the back room (4.2 s → 18.35 s, then the needle scratch)
   const len = 14.8, O = new OfflineAudioContext(2, Math.ceil(len * SRATE), SRATE);
+  // a 78 on a horn gramophone: narrow but not tinny, a little warmth from the horn, a small room around it
   const bus = O.createGain(); bus.gain.value = 0.8;
-  const hp = O.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 160;
-  const lp = O.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4800; lp.Q.value = 0.9;
-  const pk = O.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1500; pk.gain.value = 5;
-  bus.connect(hp); hp.connect(pk); pk.connect(lp); lp.connect(O.destination);
+  const hp = O.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 75; hp.Q.value = 0.5;
+  const pk = O.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 1100; pk.Q.value = 0.7; pk.gain.value = 2;
+  const lp = O.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6500; lp.Q.value = 0.6;
+  const ws = O.createWaveShaper(); { const c = new Float32Array(1024); for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; c[i] = Math.tanh(x * 1.4) / Math.tanh(1.4); } ws.curve = c; }
+  const room = O.createConvolver(); room.buffer = toAB(makeIR(0.9, { tau: 0.28, bright: 3500, dark: 1200, pre: 0.008 })); const rg = O.createGain(); rg.gain.value = 0.18;
+  bus.connect(hp); hp.connect(pk); pk.connect(lp); lp.connect(ws); ws.connect(O.destination); ws.connect(room); room.connect(rg); rg.connect(O.destination);
   const smp = (b, t, g, rate = 1) => { t = Math.max(0, t); const s = O.createBufferSource(); s.buffer = b instanceof AudioBuffer ? b : toAB([b]); s.playbackRate.value = rate; const gg = O.createGain(); gg.gain.value = g; s.connect(gg); gg.connect(bus); s.start(t); };
-  const beat = 0.625, bars = [[38, 40, 41, 42], [43, 47, 50, 49], [48, 45, 41, 38], [33, 37, 40, 43]];
-  const voic = [[53, 57, 60, 64], [53, 59, 64], [53, 57, 60, 64], [55, 61, 65, 70]];
-  const pc = {}, pn = (m, v = 0.45, d = 1.4) => { const k = m + '|' + v + '|' + d; return pc[k] || (pc[k] = toAB(pianoNote(m, d, v))); };
-  const kc = {}, kn = m => kc[m] || (kc[m] = toAB([ksPluck(m, 1.2, 0.35)]));
+  const beat = 0.625, sw = beat * 0.67, bars = [[38, 40, 41, 42], [43, 47, 50, 49], [48, 45, 41, 38], [33, 37, 40, 43]];
+  const kc = {}, kn = m => kc[m] || (kc[m] = toAB([ksPluck(m, 0.9, 0.3)]));
+  const ride = toAB([jazzRide()]);
+  const chick = toAB([noiseBurst(0.06, 0.01, 0.001, new BQ('bandpass', 6500, 1.2))]);
+  const swish = toAB([(() => { const a = noiseBurst(beat * 2, beat * 2, 0.08, new BQ('bandpass', 4200, 0.8)); for (let i = 0; i < a.length; i++) a[i] *= Math.sin(Math.PI * i / a.length) ** 1.5; return peakNorm([a], 0.4)[0]; })()]);
   for (let i = 0; i * beat < 14.0; i++) {
-    const t = i * beat, bar = Math.floor(i / 4) % 4, b = i % 4;
-    smp(kn(bars[bar][b]), t, 0.75);
-    if (i % 3 === 2) smp(kn(bars[bar][b] + 12), t + beat * 0.66, 0.18);
-    smp(D.brushSwirl, t, 0.5); if (b % 2) smp(D.brushSlap, t, 0.55);
-    smp(D.ride, t, 0.35); if (b % 2) smp(D.ride, t + beat * 0.66, 0.22);
-    smp(D.kick, t, 0.12);
-    if (b === 1 || (b === 3 && bar % 2)) voic[bar].forEach((m, k) => smp(pn(m, 0.38), t + beat * 0.5 + k * 0.012, 0.1));
-  }
-  // right hand: a lazy swung line over Dm9 | G13 | Fmaj7 | A7alt (positions in beats; swing eighths land on .67)
-  const LINE = [
-    [[0, 69, 1.5], [1.67, 72, 0.33], [2, 74, 0.67], [2.67, 76, 0.33], [3, 77, 1]],
-    [[0, 76, 1], [1, 74, 0.67], [1.67, 71, 0.33], [2, 69, 1], [3, 67, 0.67], [3.67, 69, 0.33]],
-    [[0.67, 69, 0.33], [1, 72, 0.67], [1.67, 76, 0.33], [2, 77, 0.67], [2.67, 76, 0.33], [3, 74, 1]],
-    [[0, 73, 1.5], [1.67, 70, 0.33], [2, 69, 0.67], [2.67, 65, 0.33], [3, 64, 1]],
-  ];
-  for (let bar = 0; bar * 4 * beat < 13.8; bar++) for (const [pos, m, d] of LINE[bar % 4]) {
-    const t = Math.max(0, (bar * 4 + pos) * beat + (Math.random() - 0.5) * 0.02), v = (pos % 1 ? 0.42 : 0.55) + (bar >= 4 ? 0.05 : 0);
-    if (t < 13.9) smp(pn(m + (bar >= 4 && m < 70 ? 12 : 0), +v.toFixed(2), Math.max(0.35, d * beat * 1.1)), t, 0.2);
+    const t = i * beat + (Math.random() - 0.5) * 0.008, bar = Math.floor(i / 4) % 4, b = i % 4;
+    smp(kn(bars[bar][b]), t, b % 2 ? 0.62 : 0.7);                                     // walking bass, slightly heavier on 1 and 3
+    if (b === 3 && Math.floor(i / 4) % 2) smp(kn(bars[(bar + 1) % 4][0] + 1), t + sw, 0.3); // chromatic skip into the next bar
+    smp(ride, t, b % 2 ? 0.2 : 0.15);                                                   // ding... ding-da ding
+    if (b % 2) { smp(ride, t + sw, 0.11); smp(chick, t, 0.12); smp(D.brushSlap, t, 0.16); }
+    if (b % 2 === 0) smp(swish, t, 0.3);                                                // brush circling the snare, one sweep per two beats
   }
   // vinyl crackle
-  const cr = mkb(len); for (let k = 0; k < len * 40; k++) addTo(cr, noiseBurst(0.004, 0.0008, 0.0001, new BQ('highpass', 2000)), Math.random() * len, 0.25 * Math.random() ** 2);
-  addTo(cr, chain(pinkNoise(len), new BQ('bandpass', 3000, 0.6)), 0, 0.012);
+  const cr = mkb(len); for (let k = 0; k < len * 12; k++) addTo(cr, noiseBurst(0.003, 0.0006, 0.0001, new BQ('highpass', 2500)), Math.random() * len, 0.1 * Math.random() ** 2);
+  addTo(cr, chain(pinkNoise(len), new BQ('bandpass', 3000, 0.6)), 0, 0.004);
   smp(cr, 0, 1);
   smp(needleScratch(), 14.15, 1.2);
   const res = await O.startRendering();
