@@ -502,7 +502,7 @@ const MAT = {
   carGlass: std({ color: 0x05070a, roughness: 0.04, metalness: 0.3, envMapIntensity: 2.0 }),
   tyre: std({ color: 0x0b0b0c, roughness: 0.75 }),
   whitewall: std({ color: 0xd8d4c8, roughness: 0.6 }),
-  carInterior: std({ color: 0x0a0807, roughness: 0.9 }),
+  carInterior: std({ color: 0x3a2318, roughness: 0.7 }), // oxblood leather
   windowGlass: std({ color: 0x223040, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.32, envMapIntensity: 2.2, side: THREE.DoubleSide, depthWrite: false }),
   darkGlass: std({ color: 0x06080b, roughness: 0.08, metalness: 0.2, envMapIntensity: 1.6 }),
   shard: std({ color: 0xcfe4f2, roughness: 0.03, metalness: 0.2, transparent: true, opacity: 0.7, envMapIntensity: 3.0, side: THREE.DoubleSide }),
@@ -1460,7 +1460,7 @@ class Pelican {
     const Gp = (parent, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
     this.root = new THREE.Group(); this.root.scale.setScalar(scale);
     this.body = Gp(this.root, 0, 13 * V, 0);
-    this.torso = Gp(this.body); M(G.torso, this.torso); M(G.skirt, this.body);
+    this.torso = Gp(this.body); M(G.torso, this.torso); this.skirt = M(G.skirt, this.body);
     this.head = Gp(this.torso, 0, 12 * V, 0); this.head.rotation.order = 'YXZ'; M(G.head, this.head);
     this.jaw = M(G.jaw, this.head, 0, 5 * V, 4.5 * V);
     this.hat = M(G.hat, this.head);
@@ -1762,8 +1762,8 @@ function loft(z0, z1, nz, a0, a1, na, fn, { closed = false, scale = 1, centre = 
 const CAR = (() => {
   const BW = keyf([[-2.66, 0.12], [-2.6, 0.62], [-2.4, 0.8], [-2.0, 0.86], [0.75, 0.86], [1.0, 0.66], [2.2, 0.58], [2.5, 0.44], [2.66, 0.12]]);
   const BT = keyf([[-2.66, 0.62], [-2.58, 0.84], [-2.25, 0.97], [-1.8, 1.02], [0.8, 1.02], [1.3, 1.05], [2.2, 0.99], [2.52, 0.86], [2.66, 0.62]]);
-  const BB = keyf([[-2.66, 0.55], [-2.55, 0.42], [-2.1, 0.36], [2.1, 0.36], [2.55, 0.42], [2.66, 0.55]]);
-  const CT = keyf([[-2.15, 1.0], [-1.85, 1.16], [-1.45, 1.4], [-1.0, 1.58], [-0.55, 1.635], [0.22, 1.635], [0.36, 1.6], [0.74, 1.08], [0.78, 1.0]]);
+  const BB = keyf([[-2.66, 0.5], [-2.55, 0.38], [-2.2, 0.3], [2.2, 0.3], [2.55, 0.36], [2.66, 0.48]]);
+  const CT = keyf([[-2.15, 1.0], [-1.85, 1.17], [-1.45, 1.42], [-1.0, 1.61], [-0.55, 1.67], [0.22, 1.67], [0.36, 1.63], [0.74, 1.08], [0.78, 1.0]]);
   const CW = keyf([[-2.15, 0.62], [-1.7, 0.79], [-1.0, 0.81], [0.45, 0.81], [0.78, 0.74]]);
   const BELT = 1.0;
   const body = (z, a) => { const [ex, ey] = sEll(a, 4); const T = BT(z), B = BB(z); return [ex * BW(z), (T + B) / 2 + ey * (T - B) / 2]; };
@@ -1773,10 +1773,12 @@ const CAR = (() => {
   const fender = (cx, Wk, Tk, Bk) => (z, a) => { const [ex, ey] = sEll(a, 2.5); const T = Tk(z), B = Bk(z); return [cx + ex * Wk(z), (T + B) / 2 + ey * (T - B) / 2]; };
   const FW = keyf([[0.62, 0.02], [0.95, 0.15], [1.35, 0.215], [2.2, 0.205], [2.5, 0.16], [2.66, 0.04]]);
   const FT = keyf([[0.62, 0.48], [0.95, 0.84], [1.45, 1.03], [1.95, 1.05], [2.32, 0.99], [2.56, 0.8], [2.66, 0.58]]);
-  const FB = keyf([[0.62, 0.42], [1.0, 0.5], [2.4, 0.5], [2.66, 0.56]]);
+  // fender skirts come down low, with a round wheel arch cut around each tyre
+  const arch = (zc, ra, base) => z => { const d = Math.abs(z - zc); const b = base(z); if (d < ra) return Math.max(b, 0.426 + Math.sqrt(ra * ra - d * d)); return lerp(0.426, b, sat((d - ra) / 0.07)); };
+  const FB = arch(1.62, 0.5, keyf([[0.62, 0.36], [1.0, 0.3], [2.4, 0.31], [2.66, 0.42]]));
   const RW = keyf([[-2.55, 0.03], [-2.25, 0.16], [-1.5, 0.185], [-1.05, 0.12], [-0.9, 0.02]]);
   const RT = keyf([[-2.55, 0.58], [-2.32, 0.9], [-1.9, 1.0], [-1.4, 0.98], [-1.06, 0.78], [-0.9, 0.44]]);
-  const RB = keyf([[-2.55, 0.5], [-2.3, 0.42], [-1.0, 0.42], [-0.9, 0.44]]);
+  const RB = arch(-1.62, 0.48, keyf([[-2.55, 0.44], [-2.3, 0.32], [-1.0, 0.3], [-0.9, 0.36]]));
   const G = {};
   G.body = loft(-2.66, 2.66, 80, 0, TAU, 48, body, { closed: true });
   // cabin pieces: roof, fastback, pillars; windows are separate glass
@@ -1793,8 +1795,8 @@ const CAR = (() => {
   G.rearGlass = loft(-1.5, -1.05, 8, 1.05, Math.PI - 1.05, 12, cab, { scale: 1.003, centre: cabC });
   G.fenders = [];
   for (const s of [-1, 1]) {
-    G.fenders.push(loft(0.62, 2.66, 40, 0, TAU, 28, fender(s * 0.8, FW, FT, FB), { closed: true }));
-    G.fenders.push(loft(-2.55, -0.9, 30, 0, TAU, 28, fender(s * 0.82, RW, RT, RB), { closed: true }));
+    G.fenders.push(loft(0.62, 2.66, 72, 0, TAU, 28, fender(s * 0.8, FW, FT, FB), { closed: true }));
+    G.fenders.push(loft(-2.55, -0.9, 60, 0, TAU, 28, fender(s * 0.82, RW, RT, RB), { closed: true }));
   }
   // doors: [z0, z1, hinge z, front?]; geometry per side
   G.doors = [];
@@ -1821,31 +1823,32 @@ const CAR = (() => {
   Object.assign(G, { BW, BT, BB, CT, CW, FT, BELT });
   return G;
 })();
-const PAINT = new THREE.MeshPhysicalMaterial({ color: 0x07080a, roughness: 0.3, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 0.8, side: THREE.DoubleSide });
+const PAINT = new THREE.MeshPhysicalMaterial({ color: 0x0c0d10, roughness: 0.32, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.0, side: THREE.DoubleSide });
+const CAR_PAINTS = [0x0c0d10, 0x2c0a0d, 0x0e1916]; // gloss black, oxblood, black-green
 MAT.carPaint = PAINT;
-MAT.carGlassT = new THREE.MeshPhysicalMaterial({ color: 0x1a2430, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.38, envMapIntensity: 2.2, side: THREE.DoubleSide, depthWrite: false });
+MAT.carGlassT = new THREE.MeshPhysicalMaterial({ color: 0x1a2430, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.55, envMapIntensity: 3.0, side: THREE.DoubleSide, depthWrite: false });
 const cars = [];
 function makeSedan() {
   const car = { root: new THREE.Group(), doors: [], wheels: [], lights: [], susp: { p: 0, pv: 0, r: 0, rv: 0 }, windows: [] };
   car.root.rotation.order = 'YXZ';
   car.body = new THREE.Group(); car.root.add(car.body);
   const add = (geo, mat, parent = car.body, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.castShadow = shadow; m.receiveShadow = true; parent.add(m); return m; };
-  add(CAR.body, PAINT);
-  for (const g of CAR.cabin) add(g, PAINT);
-  for (const g of CAR.fenders) add(g, PAINT);
+  const paint = PAINT.clone(); paint.color.setHex(CAR_PAINTS[cars.length % CAR_PAINTS.length]); car.paint = paint;
+  add(CAR.body, paint);
+  for (const g of CAR.cabin) add(g, paint);
+  for (const g of CAR.fenders) add(g, paint);
   const ws = add(CAR.windshield, MAT.carGlassT, car.body, 0, 0, 0, 0, 0, 0, false); ws.renderOrder = 3; car.windows.push(ws);
   const rg = add(CAR.rearGlass, MAT.carGlassT, car.body, 0, 0, 0, 0, 0, 0, false); rg.renderOrder = 3; car.windows.push(rg);
   add(BX(0.012, 0.42, 0.012), MAT.chrome, car.body, 0, 1.33, 0.55, -0.95);
   // interior: floor, benches, dash, steering wheel
-  add(BX(1.46, 0.03, 2.5), MAT.carInterior, car.body, 0, 1.02, -0.62, 0, 0, 0, false);
-  add(BX(1.42, 0.5, 0.14), MAT.carInterior, car.body, 0, 1.22, -0.24, -0.12, 0, 0, false);
-  add(BX(1.42, 0.5, 0.14), MAT.carInterior, car.body, 0, 1.2, -1.32, -0.12, 0, 0, false);
+  add(BX(1.46, 0.03, 2.5), MAT.carInterior, car.body, 0, 0.42, -0.62, 0, 0, 0, false);
+  for (const z of [0.2, -0.9]) { add(BX(1.42, 0.16, 0.5), MAT.carInterior, car.body, 0, 0.5, z, 0, 0, 0, false); add(BX(1.42, 0.62, 0.12), MAT.carInterior, car.body, 0, 0.86, z - 0.3, -0.14, 0, 0, false); }
   add(BX(1.46, 0.16, 0.2), MAT.carInterior, car.body, 0, 1.1, 0.56, 0, 0, 0, false);
   add(new THREE.TorusGeometry(0.17, 0.014, 6, 24), MAT.gunDark, car.body, 0.4, 1.28, 0.38, -1.1, 0, 0, false);
   for (const s of [-1, 1]) {
     // running boards
-    add(BX(0.18, 0.035, 1.6), MAT.rubber || MAT.gunDark, car.body, s * 0.93, 0.39, -0.14);
-    add(BX(0.012, 0.02, 1.6), MAT.chrome, car.body, s * 1.02, 0.39, -0.14, 0, 0, 0, false);
+    add(BX(0.16, 0.035, 1.5), MAT.rubber || MAT.gunDark, car.body, s * 0.92, 0.31, -0.14);
+    add(BX(0.012, 0.02, 1.5), MAT.chrome, car.body, s * 1.0, 0.31, -0.14, 0, 0, 0, false);
     // headlights in the fenders: chrome bezel, glowing lens
     add(new THREE.TorusGeometry(0.115, 0.022, 8, 24), MAT.chrome, car.body, s * 0.8, 0.88, 2.47, 0, 0, 0, false);
     const lens = add(new THREE.CircleGeometry(0.11, 24), glowMat(0xfff0d0, 3), car.body, s * 0.8, 0.88, 2.485, 0, 0, 0, false);
@@ -1878,7 +1881,7 @@ function makeSedan() {
   for (const D of CAR.doors) {
     add(D.cavity, MAT.carInterior, car.body, 0, 0, 0, 0, 0, 0, false);
     const pivot = new THREE.Group(); pivot.position.set(D.px, 0, D.zh); car.body.add(pivot);
-    add(D.skin, PAINT, pivot); add(D.inner, MAT.carInterior, pivot, 0, 0, 0, 0, 0, 0, false);
+    add(D.skin, paint, pivot); add(D.inner, MAT.carInterior, pivot, 0, 0, 0, 0, 0, 0, false);
     const gl = add(D.glass, MAT.carGlassT, pivot, 0, 0, 0, 0, 0, 0, false); gl.renderOrder = 3; car.windows.push(gl);
     const hz = D.front ? -0.62 : 0.62;
     add(BX(0.03, 0.025, 0.13), MAT.chrome, pivot, D.s * 0.012, 0.93, hz * 0.95 * (D.front ? 1 : 1) + (D.front ? 0 : 0), 0, 0, 0, false);
@@ -1893,7 +1896,7 @@ function makeSedan() {
   cars.push(car);
   return car;
 }
-const CAR_SCALE = 1.1;
+const CAR_SCALE = 1.25; // big enough for seated pelicans in hats, with true 1940s proportions
 function setDoor(car, i, t) {
   const d = car.doors[i]; d.open = t;
   d.pivot.rotation.y = (d.front ? -d.side : d.side) * t * 1.12;
@@ -2750,11 +2753,11 @@ function slowWhoom() {
 }
 function rainLoop(sec, patter) {
   const L = mkb(sec + 0.5), R = mkb(sec + 0.5);
-  const bedL = chain(pinkNoise(sec + 0.5), new BQ('highpass', 350), new BQ('lowpass', 7000)), bedR = chain(pinkNoise(sec + 0.5), new BQ('highpass', 350), new BQ('lowpass', 7000));
+  const bedL = chain(pinkNoise(sec + 0.5), new BQ('highpass', 350), new BQ('lowpass', 4200)), bedR = chain(pinkNoise(sec + 0.5), new BQ('highpass', 350), new BQ('lowpass', 4200));
   const lowL = chain(brownNoise(sec + 0.5, 0.01), new BQ('lowpass', 170)), lowR = chain(brownNoise(sec + 0.5, 0.01), new BQ('lowpass', 170));
   addTo(L, bedL, 0, 0.22); addTo(R, bedR, 0, 0.22); addTo(L, lowL, 0, 0.35); addTo(R, lowR, 0, 0.35);
   const drop = (dst, t, f, tau, amp) => { const o = Math.round(t * SRATE), n = Math.round(tau * 6 * SRATE), w = TAU * f / SRATE; for (let i = 0; i < n && o + i < dst.length; i++) dst[o + i] += Math.sin(w * i) * amp * Math.exp(-i / (tau * SRATE)); };
-  for (let k = 0; k < sec * 2600 * patter; k++) { const t = Math.random() * (sec + 0.4), amp = 0.09 * Math.random() ** 3, p = Math.random(); drop(p < 0.5 ? L : R, t, 1800 + Math.random() * 5500, 0.0012 + Math.random() * 0.003, amp); }
+  for (let k = 0; k < sec * 2600 * patter; k++) { const t = Math.random() * (sec + 0.4), amp = 0.06 * Math.random() ** 3, p = Math.random(); drop(p < 0.5 ? L : R, t, 1800 + Math.random() * 5500, 0.0012 + Math.random() * 0.003, amp); }
   for (let k = 0; k < sec * 70 * patter; k++) { const t = Math.random() * (sec + 0.4); drop(Math.random() < 0.5 ? L : R, t, 500 + Math.random() * 1000, 0.006 + Math.random() * 0.01, 0.12 * Math.random() ** 2); }
   return peakNorm([loopify(L, 0.5), loopify(R, 0.5)], 0.7);
 }
@@ -3036,7 +3039,7 @@ const SND = {
     this.jazzG = G(0.5); this.jazzLP.connect(this.jazzG); this.jazzG.connect(this.out);
     const jv = G(0.25); this.jazzG.connect(jv); jv.connect(this.vRoom);
     this.ambLP = c.createBiquadFilter(); this.ambLP.type = 'lowpass'; this.ambLP.frequency.value = 16000;
-    this.amb = G(0.85); this.ambLP.connect(this.amb); this.amb.connect(this.out);
+    this.amb = G(0.2); this.ambLP.connect(this.amb); this.amb.connect(this.out);
     this.rainSrc = c.createBufferSource(); this.rainSrc.buffer = this.bank.rain; this.rainSrc.loop = true; this.rainSrc.connect(this.ambLP); this.rainSrc.start();
     this.roofSrc = c.createBufferSource(); this.roofSrc.buffer = this.bank.rainRoof; this.roofSrc.loop = true; this.roofG = G(0); this.roofSrc.connect(this.roofG); this.roofG.connect(this.ambLP); this.roofSrc.start();
     // engines + tyres, gain driven per frame
@@ -3120,8 +3123,8 @@ const SND = {
     const c = this.ctx, now = c.currentTime, sh = STATE.shot || {}, ts = STATE.ts;
     const inside = !!sh.inside;
     this.ambLP.frequency.setTargetAtTime(inside ? 650 : sh.bullet ? 2500 : 16000, now, 0.08);
-    this.amb.gain.setTargetAtTime(inside ? 0.45 : 0.85, now, 0.1);
-    this.roofG.gain.setTargetAtTime(sh.tower ? 0.9 : 0, now, 0.2);
+    this.amb.gain.setTargetAtTime(inside ? 0.11 : sh.tower ? 0.16 : 0.2, now, 0.1);
+    this.roofG.gain.setTargetAtTime(sh.tower ? 0.3 : 0, now, 0.2);
     const rr = ts < 0.6 ? 0.45 + ts * 0.6 : 1;
     this.rainSrc.playbackRate.setTargetAtTime(rr, now, 0.15); this.roofSrc.playbackRate.setTargetAtTime(rr, now, 0.15);
     // the gramophone: clear inside the room, muffled through the walls
@@ -3179,23 +3182,25 @@ const scopeGlint = makeGlint(0xbfe0ff, 0.9); rifle.userData.glint.add(scopeGlint
 
 for (let i = 0; i < 3; i++) makeSedan();
 const CAR_X = [-7, 1, 9], CAR_Z = 3.0;
+// cruise in at ~45 km/h, then one hard stop: constant speed, then constant deceleration to rest
+const CAR_V0 = 12.5, CAR_TB = 1.7, CAR_DB = CAR_V0 * CAR_TB / 2;
 // car-local door centres → world (cars face -x once parked)
 const carLocalToWorld = (ci, lx, lz) => v3(CAR_X[ci] - lz * CAR_SCALE, 0, CAR_Z + lx * CAR_SCALE);
 const carDoorWorld = (ci, front, far) => carLocalToWorld(ci, far ? 1.0 : -1.0, front ? 0.43 : -0.6);
 // rivals: [name, car, frontDoor, farSide, spot, tOut, gun, via, seat (car-local x, z)]
 const RIVAL_DEF = [
-  ['R1', 0, true, false, [-8.4, 1.1], 15.0, 'tommy', null, [-0.42, 0.0]],
-  ['R2', 0, false, false, [-5.9, 1.3], 15.45, 'pistol', null, [-0.42, -1.05]],
-  ['R3', 0, true, true, [-10.6, 1.9], 15.9, 'tommy', [-10.2, 4.3], [0.42, 0.0]],
+  ['R1', 0, true, false, [-8.4, 1.1], 15.0, 'tommy', null, [-0.33, 0.0]],
+  ['R2', 0, false, false, [-5.9, 1.3], 15.45, 'pistol', null, [-0.33, -1.05]],
+  ['R3', 0, true, true, [-11.1, 1.9], 15.9, 'tommy', [-11.1, 4.3], [0.33, 0.0]],
   ['R4', 1, true, false, [-0.7, 1.0], 15.2, 'pistol', null, [-0.05, 0.0]],
-  ['R5', 1, false, false, [2.3, 1.2], 15.65, 'tommy', null, [-0.42, -1.05]],
-  ['R6', 2, true, false, [7.6, 1.1], 15.1, 'tommy', null, [-0.42, 0.0]],
-  ['R7', 2, false, false, [10.1, 1.4], 15.55, 'pistol', null, [-0.42, -1.05]],
-  ['R8', 2, true, true, [12.6, 2.0], 16.0, 'tommy', [12.4, 4.3], [0.42, 0.0]],
-  ['W1', 0, false, true, [-6.0, 4.65], 44.15, 'tommy', null, [0.42, -1.05]],
+  ['R5', 1, false, false, [2.3, 1.2], 15.65, 'tommy', null, [-0.33, -1.05]],
+  ['R6', 2, true, false, [7.6, 1.1], 15.1, 'tommy', null, [-0.33, 0.0]],
+  ['R7', 2, false, false, [10.1, 1.4], 15.55, 'pistol', null, [-0.33, -1.05]],
+  ['R8', 2, true, true, [13.1, 2.0], 16.0, 'tommy', [13.1, 4.3], [0.33, 0.0]],
+  ['W1', 0, false, true, [-6.0, 4.65], 44.15, 'tommy', null, [0.33, -1.05]],
   ['W2', 0, true, true, [-8.3, 4.75], 44.4, 'pistol', null, [0.0, -1.05]],
   ['W3', 2, true, true, [8.2, 4.6], 44.25, 'tommy', null, [0.0, -1.05]],
-  ['W4', 2, false, true, [10.4, 4.65], 44.55, 'pistol', null, [0.42, -1.05]],
+  ['W4', 2, false, true, [10.4, 4.65], 44.55, 'pistol', null, [0.33, -1.05]],
 ];
 const RIVALS = RIVAL_DEF.map(([name, car, front, far, spot, tOut, gun, via, seat]) => {
   const r = new Pelican('rival', { scale: SR(0.96, 1.05), gun, name });
@@ -3205,7 +3210,7 @@ const RIVALS = RIVAL_DEF.map(([name, car, front, far, spot, tOut, gun, via, seat
   return r;
 });
 const R = Object.fromEntries(RIVALS.map(r => [r.name, r]));
-leader.def = { car: 1, front: false, far: true, tOut: 16.3, door: carDoorWorld(1, false, true), seat: [0.42, -1.05] };
+leader.def = { car: 1, front: false, far: true, tOut: 16.3, door: carDoorWorld(1, false, true), seat: [0.33, -0.8] };
 leader.def.path = [leader.def.door, leader.def.door.clone().setZ(leader.def.door.z + 0.75), v3(2.5, 0, 4.55)];
 const ALL_RIVALS = [...RIVALS, leader];
 
@@ -3481,6 +3486,7 @@ for (const [n, t] of SNIPER_SEQ) R[n].killT = t;
 
 // ---- scripted moments
 for (const [i, t] of [[0, 18.32], [2, 18.32], [5, 18.47], [7, 18.5], [1, 18.66], [3, 18.7], [4, 18.86], [6, 18.92]]) at(t, () => shatterPane(i));
+for (let i = 0; i < 3; i++) at(12.35 + i * 0.3 - CAR_TB + 0.08, () => SND.play('skid', { pos: cars[i].root.position, gain: 0.3, rate: 0.62 }));
 at(14.4, () => cars.forEach(c => { SND.play('doorOpen', { pos: c.root.position, gain: 0.8 }); c.susp.rv += 0.25; }));
 for (const [t, ci] of [[16.95, 0], [17.1, 2], [17.3, 1], [17.55, 0], [17.7, 2], [17.85, 1]]) at(t, () => { SND.play('doorSlam', { pos: cars[ci].root.position, gain: 1 }); cars[ci].susp.rv += RR(-0.6, 0.6); cars[ci].susp.pv += 0.2; });
 at(44.05, () => [0, 2].forEach(ci => SND.play('doorOpen', { pos: cars[ci].root.position, gain: 0.8 })));
@@ -3785,22 +3791,24 @@ function directRivals(T, S) {
       if (T < 8.4) { r.root.visible = false; continue; }
       r.root.visible = true;
       car.root.updateMatrixWorld(true);
-      const sp = car.body.localToWorld(v3(d.seat[0], 0.38, d.seat[1]));
-      sitPose(p, r, 0.26); p.lean = 0.42; p.headPitch = -0.15 + Math.sin(S * 0.7 + k) * 0.05; p.headYaw = Math.sin(S * 0.4 + k) * 0.3;
+      const sp = car.body.localToWorld(v3(d.seat[0], 0.3, d.seat[1]));
+      sitPose(p, r, 0.16); p.lKnee = p.rKnee = 0.1; p.lean = 0.42;
+      r.legL.knee.visible = r.legR.knee.visible = false; r.skirt.rotation.x = -1.4; r.root.scale.setScalar(r.scale * 0.92); // coat over the lap; shins and feet would poke through the floor pan
+      p.headPitch = -0.15 + Math.sin(S * 0.7 + k) * 0.05; p.headYaw = Math.sin(S * 0.4 + k) * 0.3;
       p.lArm = -0.9; p.lElbow = -0.8; p.rArm = -0.9; p.rElbow = -0.8;
       if (d.seat[0] > 0.3 && d.seat[1] > -0.5) { p.lArm = -1.2; p.rArm = -1.2; p.lElbow = -0.4; p.rElbow = -0.4; }
       r.place(sp.x, sp.z, car.root.rotation.y, sp.y);
       r.apply();
       continue;
     }
-    r.root.visible = true;
+    r.root.visible = true; r.legL.knee.visible = r.legR.knee.visible = true; r.skirt.rotation.x = 0; r.root.scale.setScalar(r.scale);
     const seatW = carLocalToWorld(d.car, d.seat[0], d.seat[1]);
     const path = [seatW, ...d.path];
     const L = polyLen(path), dur = 0.6 + L / 1.9, u = (T - d.tOut) / dur;
     const pos = polyAt(path, u, v3());
     let yaw = u < 1 ? pos.userData.yaw : Math.PI;
     const standUp = smooth(0, 0.35, u * dur);
-    if (u < 1) { walkPose(p, pos.userData.dist / 0.42 * Math.PI, smooth(0, 0.12, u)); if (standUp < 1) { p.sit = lerp(0.3, 0, standUp) / r.scale; p.lean += 0.4 * (1 - standUp); } }
+    if (u < 1) { walkPose(p, pos.userData.dist / 0.42 * Math.PI, smooth(0, 0.12, u)); if (standUp < 1) { p.sit = lerp(0.2, 0, standUp) / r.scale; p.lean += 0.4 * (1 - standUp); r.root.scale.setScalar(r.scale * lerp(0.92, 1, standUp)); } }
     breathe(p, S, k);
     const draw = smooth(d.tOut + dur * 0.5, d.tOut + dur * 0.5 + 0.5, T);
     let aimPt = T < 25 ? RIVAL_AIM_IN : RIVAL_AIM_OUT;
@@ -3814,7 +3822,7 @@ function directRivals(T, S) {
       if (adv > 0) { pos.z -= adv; if (T > 45.5 && T < 52.5) walkPose(p, adv / 0.35 * Math.PI, 0.45); }
     }
     if (r === leader && T > 52.6) {
-      const pts = [v3(2.5, 0, 4.55), v3(4.3, 0, 3.9), v3(4.2, 0, 1.4), v3(LEADER_MARK.x, 0, LEADER_MARK.z)];
+      const pts = [v3(2.5, 0, 4.55), v3(5.0, 0, 3.9), v3(5.0, 0, 1.4), v3(LEADER_MARK.x, 0, LEADER_MARK.z)];
       const wu = (T - 52.6) / 2.1;
       polyAt(pts, wu, pos); yaw = wu < 1 ? pos.userData.yaw : Math.PI;
       if (wu > 0 && wu < 1) walkPose(p, pos.userData.dist / 0.48 * Math.PI, 1);
@@ -3845,31 +3853,43 @@ function directRivals(T, S) {
 }
 
 // cars roll in from the east, ease toward the kerb and park; their bodies rock on the springs
+function carRem(i, T) { // metres still to travel before the parking mark
+  const tau = 12.35 + i * 0.3 - T;
+  if (tau <= 0) return 0;
+  if (tau < CAR_TB) return CAR_V0 * tau * tau / (2 * CAR_TB);
+  return CAR_DB + CAR_V0 * (tau - CAR_TB);
+}
+function carXZ(i, T) {
+  const rem = carRem(i, T), lane = 1 - smooth(5, 24, rem); // slide over to the kerb before braking
+  return [CAR_X[i] + rem, lerp(1.4, CAR_Z, lane), rem];
+}
 function carPose(i, T) {
-  const tStop = 12.35 + i * 0.3, dur = 3.6, D = 38;
-  const u = sat((T - (tStop - dur)) / dur);
-  const x = CAR_X[i] + D * (1 - u) * (1 - u);
-  const v = 2 * D * (1 - u) / dur;
-  const lane = smooth(0.45, 1.0, u);
-  const z = lerp(1.4, CAR_Z, lane);
-  // heading follows the lane change: dz/dx from the two curves
-  const du = 0.001, u2 = Math.min(1, u + du), x2 = CAR_X[i] + D * (1 - u2) * (1 - u2), z2 = lerp(1.4, CAR_Z, smooth(0.45, 1.0, u2));
-  const yaw = u < 0.999 ? Math.atan2(x2 - x, z2 - z) : -Math.PI / 2;
-  return { x, z, v, yaw: isFinite(yaw) ? yaw : -Math.PI / 2, u, braking: u < 1 && T > tStop - dur };
+  const h = 1 / 60, [x, z, rem] = carXZ(i, T), [x1, z1] = carXZ(i, T + h), [x0, z0] = carXZ(i, T - h);
+  const vx = (x1 - x0) / (2 * h), vz = (z1 - z0) / (2 * h), v = Math.hypot(vx, vz);
+  const yaw = v > 0.05 ? Math.atan2(vx, vz) : -Math.PI / 2;
+  // acceleration in the car's frame: forward (braking) and sideways (lane change)
+  const ax = (x1 - 2 * x + x0) / (h * h), az = (z1 - 2 * z + z0) / (h * h);
+  const fwd = v > 0.05 ? (ax * vx + az * vz) / v : 0;
+  const side = ax * Math.cos(yaw) - az * Math.sin(yaw);
+  const yaw1 = Math.atan2(x1 - x, z1 - z), yawRate = v > 0.3 ? Math.atan2(Math.sin(yaw1 - yaw), Math.cos(yaw1 - yaw)) / h * 2 : 0;
+  return { x, z, v, yaw, rem, fwd, side, yawRate };
 }
 function directCars(T, S, dS) {
   for (let i = 0; i < 3; i++) {
     const car = cars[i], P = carPose(i, T);
     car.root.position.set(P.x, 0, P.z); car.root.rotation.set(0, P.yaw, 0);
-    const s = car.susp, targetP = P.braking ? 0.028 : 0, w = 7, z = 0.25;
+    // sprung body: nose dives under braking, leans out of the lane change, then rocks back on the springs
+    const s = car.susp, targetP = clamp(-P.fwd * 0.0042, -0.02, 0.04), targetR = clamp(P.side * 0.012, -0.05, 0.05), w = 7.5, z = 0.28;
     if (dS > 0) {
       let rem = Math.min(dS, 0.1);
-      while (rem > 0) { const h = Math.min(rem, 1 / 120); rem -= h; s.pv += (-(w * w) * (s.p - targetP) - 2 * z * w * s.pv) * h; s.p += s.pv * h; s.rv += (-(w * w) * s.r - 2 * z * w * s.rv) * h; s.r += s.rv * h; }
+      while (rem > 0) { const h = Math.min(rem, 1 / 120); rem -= h; s.pv += (-(w * w) * (s.p - targetP) - 2 * z * w * s.pv) * h; s.p += s.pv * h; s.rv += (-(w * w) * (s.r - targetR) - 2 * z * w * s.rv) * h; s.r += s.rv * h; }
     }
     car.body.rotation.set(s.p + Math.sin(S * 23 + i) * 0.0015 * (car.engine || 0), 0, s.r);
-    const spin = (38 * (1 - P.u) * (1 - P.u)) / (0.426 * CAR_SCALE);
+    car.body.position.y = -Math.abs(s.p) * 0.6 - Math.abs(s.r) * 0.3; // squat into the springs
+    const spin = -P.rem / (0.426 * CAR_SCALE); // rolling forward: angle grows as the car covers ground
     for (const wh of car.wheels) wh.rotation.x = spin;
-    for (const st of car.steer) if (st) st.rotation.y = clamp((P.yaw + Math.PI / 2) * -3, -0.5, 0.5);
+    const steer = clamp(3.56 * P.yawRate / Math.max(P.v, 1), -0.5, 0.5);
+    for (const st of car.steer) if (st) st.rotation.y = steer;
     car.engine = T < 8.5 ? 0 : T < 18 ? 1 : 0.55;
     car.rpm = clamp(P.v / 12, 0, 1);
     car.speed = P.v;
@@ -4069,7 +4089,7 @@ for (const L of streetLamps) {
 for (const car of cars) {
   car.beams = [];
   for (const sx of [-1, 1]) {
-    const b = makeBeam(v3(sx * 0.8, 0.88, 2.5), v3(sx * 0.04, -0.07, 1), 16, 0.1, 2.6, 0xfff2d8, 0.08);
+    const b = makeBeam(v3(sx * 0.8, 0.88, 2.5), v3(sx * 0.04, -0.07, 1), 16, 0.1, 2.6, 0xfff2d8, 0.06);
     car.body.add(b); car.beams.push(b);
     const li = (sx + 1) / 2;
     makeRefl(o => car.lights[li].visible && car.spot.intensity > 0 ? car.lights[li].getWorldPosition(o) : null, new THREE.Color(1.0, 0.92, 0.75), 0.5, 5, { intensity: 0.7 });
@@ -4140,7 +4160,7 @@ shot(6.6, 8.4, { name: 'room', inside: true, shake: 0.003, cam(u, c) { c.pos.cop
 shot(8.4, 10.0, { name: 'boss', inside: true, shake: 0.003, cam(u, c) { c.pos.copy(L3(v3(0.8, 1.5, -7.55), v3(0.62, 1.5, -7.85), easeInOut(u))); c.look.copy(boss.headPos(v3())).add(v3(0.04, -0.16, 0)); c.fov = 34; } });
 shot(10.0, 12.6, { name: 'arrive', shake: 0.004, lens: 0.7, cam(u, c) { c.pos.copy(L3(v3(-14.5, 0.35, 0.3), v3(-13.8, 0.42, 0.6), u)); c.look.set(lerp(16, 0, easeOut(u)), 1.0, 3.0); c.fov = 40; } });
 shot(12.6, 14.0, { name: 'lookout', inside: true, shake: 0.004, cam(u, c) { c.pos.set(-3.0, 1.82, -7.95 + u * 0.1); c.look.set(-4.7 + u * 0.4, 1.35, 0.5); c.fov = 42; } });
-shot(14.0, 15.8, { name: 'doors', shake: 0.004, cam(u, c) { c.pos.copy(L3(v3(1.0, 1.4, -2.4), v3(1.0, 1.45, -2.1), u)); c.look.set(1.0, 1.0, 3.0); c.fov = 58; } });
+shot(14.0, 15.8, { name: 'doors', shake: 0.004, cam(u, c) { c.pos.copy(L3(v3(1.2, 1.45, -3.4), v3(1.15, 1.5, -3.05), u)); c.look.set(1.0, 1.05, 3.0); c.fov = 56; } });
 shot(15.8, 18.0, { name: 'stepout', shake: 0.005, lens: 0.5, cam(u, c) { c.pos.copy(L3(v3(-2.6, 0.42, -1.7), v3(0.9, 0.46, -1.45), easeInOut(u))); c.look.copy(L3(v3(-2.0, 1.55, 1.4), v3(1.8, 1.55, 1.4), easeInOut(u))); c.fov = 44; } });
 shot(18.0, 19.6, { name: 'openfire', shake: 0.009, cam(u, c) { c.pos.copy(L3(v3(4.3, 2.2, 6.3), v3(3.8, 2.1, 5.9), u)); c.look.set(-1.0, 1.8, -6.0); c.fov = 46; } });
 shot(19.6, 22.2, { name: 'chaos', inside: true, shake: 0.014, cam(u, c) { c.pos.copy(L3(v3(2.95, 1.25, -10.75), v3(2.55, 1.15, -10.35), u)); c.look.set(-0.5, 1.0, -7.2); c.fov = 52; } });
@@ -4621,7 +4641,7 @@ if (startT > 0) restart(Math.min(startT, DURATION - 0.1)); else update(0);
 document.getElementById('loading').style.opacity = 0;
 setTimeout(() => document.getElementById('loading').remove(), 900);
 SND.prepare();
-window.__dbg = { THREE, scene, camera, composer, renderer, cine, finalPass, bloom, SND, FX, cars, chars: () => ALL_CHARS.map(c => [c.name, c.root.visible, c.alive, c.root.getWorldPosition(v3()).toArray().map(x => +x.toFixed(2))]), heads: () => Object.fromEntries(ALL_CHARS.map(c => [c.name, c.headPos(v3()).toArray().map(x => +x.toFixed(2))])), bike: () => bike.root.position.toArray().map(x => +x.toFixed(2)).concat([+bike.root.rotation.y.toFixed(2)]) };
+window.__dbg = { THREE, scene, camera, composer, renderer, cine, finalPass, bloom, SND, FX, cars, ALL_CHARS, chars: () => ALL_CHARS.map(c => [c.name, c.root.visible, c.alive, c.root.getWorldPosition(v3()).toArray().map(x => +x.toFixed(2))]), heads: () => Object.fromEntries(ALL_CHARS.map(c => [c.name, c.headPos(v3()).toArray().map(x => +x.toFixed(2))])), bike: () => bike.root.position.toArray().map(x => +x.toFixed(2)).concat([+bike.root.rotation.y.toFixed(2)]) };
 window.__film = { seek: t => restart(t), state: STATE, pause: () => { if (STATE.playing) togglePause(); }, render: () => { update(0); composer.render(0); } };
 requestAnimationFrame(t => { lastNow = t; frame(t); });
 </script>
